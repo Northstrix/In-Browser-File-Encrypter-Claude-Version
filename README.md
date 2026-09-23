@@ -6,6 +6,8 @@ This application hasn't undergone an independent security audit and hasn't had i
 
 Made by Claude using the code of the [In-Browser-File-Encrypter](https://github.com/Northstrix/In-Browser-File-Encrypter)
 
+Check it out at [https://northstrix.github.io/In-Browser-File-Encrypter-Claude-Version/index.html](https://northstrix.github.io/In-Browser-File-Encrypter-Claude-Version/index.html)
+
 ```
 ENCRYPTION
 ==========
