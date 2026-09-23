@@ -1,0 +1,1154 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr"><head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>In-Browser File Encrypter — Claude Version</title>
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'none'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<style>
+:root{
+  --bg:#0B0D10;--panel:rgba(22,25,31,.66);--panel-solid:#161920;--panel-modal:rgba(22,25,31,.9);
+  --line:rgba(255,255,255,.09);--line-strong:rgba(255,255,255,.18);
+  --ink:#F3F0E8;--ink-mid:#A7ABB3;--ink-soft:#6D7178;
+  --accent:#3FA9F5;--accent-ink:#04141F;
+  --good:#6FCF97;--warn:#E2984F;--danger:#E2725B;
+  --ff-d:ui-serif,Georgia,Cambria,"Times New Roman",Times,serif;
+  --ff-b:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --ff-m:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  --r-lg:24px;--r-md:16px;--r-sm:10px;--r-pill:999px;
+  --glass-blur:20px;--glass-face-blur:8px;
+  --notif-tint-op:.32;--notif-face-op:.9;
+}
+/* Legacy-compatible glassmorphism: set by a one-time CSS.supports() check in JS.
+   Browsers that lack backdrop-filter get a more opaque, blur-free fallback
+   instead of a translucent panel with nothing behind it to blur (which would
+   just look foggy and hurt text contrast) — the same trick FancySlider's
+   buildBackdropStyle() uses for its glass knob/track. */
+html.no-backdrop-filter{
+  --panel:rgba(22,25,31,.93);--panel-solid:#14171c;--panel-modal:rgba(22,25,31,.97);
+  --glass-blur:0px;--glass-face-blur:0px;
+  --notif-tint-op:.2;--notif-face-op:.98;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:16px}
+body{background:var(--bg);color:var(--ink);font-family:var(--ff-b);line-height:1.55;-webkit-font-smoothing:antialiased;min-height:100vh}
+body::before{content:"";position:fixed;inset:0;z-index:-2;background:
+  radial-gradient(650px circle at 10% -8%,rgba(63,169,245,.16),transparent 60%),
+  radial-gradient(700px circle at 108% 18%,rgba(111,207,151,.10),transparent 60%),
+  var(--bg)}
+body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);
+  background-size:46px 46px;
+  -webkit-mask-image:radial-gradient(ellipse 80% 55% at 50% 0%,#000 40%,transparent 80%);
+  mask-image:radial-gradient(ellipse 80% 55% at 50% 0%,#000 40%,transparent 80%)}
+img,svg{display:block}
+button{font:inherit;color:inherit;cursor:pointer;background:none;border:none}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:8px}
+::selection{background:rgba(63,169,245,.35);color:#fff}
+
+.glass-panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);backdrop-filter:blur(var(--glass-blur)) saturate(160%);-webkit-backdrop-filter:blur(var(--glass-blur)) saturate(160%);box-shadow:0 20px 60px rgba(0,0,0,.35)}
+
+/* TOPBAR */
+.topbar{display:flex;align-items:center;justify-content:space-between;max-width:720px;margin:0 auto;padding:22px 20px 0}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.brand-icon{width:30px;height:30px;border-radius:10px;background:rgba(63,169,245,.16);border:1px solid rgba(63,169,245,.3);display:flex;align-items:center;justify-content:center;color:var(--accent);flex-shrink:0}
+.brand-text{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font-family:var(--ff-b);min-width:0}
+.brand-name{font-weight:700;font-size:.94rem;color:var(--ink);white-space:nowrap}
+.brand-badge{font-size:.6rem;font-weight:600;color:var(--accent);background:rgba(63,169,245,.14);border:1px solid rgba(63,169,245,.3);padding:3px 9px;border-radius:999px;white-space:nowrap}
+@media(max-width:420px){.brand-text{flex-direction:column;align-items:flex-start;gap:3px}.brand-name{font-size:.8rem;white-space:normal}}
+.brand-icon svg{width:16px;height:16px}
+.lang-btn{width:38px;height:38px;border-radius:50%;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--ink-mid);transition:color .2s,background .2s,border-color .2s}
+.lang-btn:hover{color:var(--ink);background:rgba(255,255,255,.06);border-color:var(--line-strong)}
+.lang-btn svg{width:17px;height:17px}
+
+/* PAGE */
+.page-wrap{max-width:720px;margin:0 auto;padding:36px 20px 60px;display:flex;flex-direction:column;gap:28px}
+
+/* HERO */
+.hero{text-align:center;padding:10px 0 4px}
+.eyebrow{font-family:var(--ff-m);font-size:.72rem;letter-spacing:.06em;color:var(--accent);display:inline-flex;align-items:center;gap:7px;margin-bottom:16px}
+.eyebrow::before{content:"";width:5px;height:5px;border-radius:50%;background:var(--accent);flex-shrink:0}
+.hero-title{font-family:var(--ff-d);font-weight:600;font-size:clamp(1.7rem,4.6vw,2.5rem);line-height:1.12;letter-spacing:-.01em;margin-bottom:14px}
+.hero-lede{font-size:.98rem;color:var(--ink-mid);max-width:44ch;margin:0 auto 26px;font-weight:400}
+.hero-stats{display:flex;justify-content:center;gap:28px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:20px}
+.hstat{text-align:center;font-family:var(--ff-m);font-size:.68rem;color:var(--ink-soft)}
+.hstat strong{display:block;font-family:var(--ff-d);font-size:1.15rem;color:var(--ink);font-weight:600;margin-bottom:3px}
+
+/* TOOL CARD */
+.tool-card{padding:26px}
+@media(min-width:560px){.tool-card{padding:32px}}
+
+.mode-tabs{display:flex;background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:var(--r-pill);padding:4px;gap:4px;margin-bottom:24px}
+.mode-tab{flex:1;padding:10px 14px;border-radius:var(--r-pill);font-weight:600;font-size:.86rem;color:var(--ink-mid);transition:background .2s,color .2s;position:relative;overflow:hidden}
+.mode-tab.active{background:var(--accent);color:var(--accent-ink)}
+.mode-tab:not(.active):hover{color:var(--ink)}
+
+.field-block{margin-bottom:22px}
+.field-label{font-size:.82rem;font-weight:600;color:var(--ink-mid);margin-bottom:9px;display:block}
+.field-sub{font-size:.76rem;color:var(--ink-soft);margin-top:6px;line-height:1.5}
+
+/* DROPZONE */
+.dropzone{border:1.5px dashed var(--line-strong);border-radius:var(--r-lg);padding:34px 18px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;position:relative}
+.dropzone:hover{border-color:rgba(63,169,245,.5)}
+.dropzone.drag{border-color:var(--accent);background:rgba(63,169,245,.08)}
+.dropzone .dz-icon{width:36px;height:36px;color:var(--accent);margin:0 auto 12px;transition:transform .2s}
+.dropzone.drag .dz-icon{transform:scale(1.1)}
+.dz-title{font-family:var(--ff-d);font-size:1.05rem;font-weight:600;margin-bottom:4px}
+.dz-sub{font-size:.78rem;color:var(--ink-soft);font-family:var(--ff-m)}
+
+.file-list{margin-top:14px}
+.files-empty{font-size:.82rem;color:var(--ink-soft);text-align:center;padding:6px 0}
+.file-row{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--line);border-radius:var(--r-md);margin-bottom:8px;background:rgba(255,255,255,.02)}
+.fr-icon{width:30px;height:30px;border-radius:9px;background:rgba(63,169,245,.12);display:flex;align-items:center;justify-content:center;color:var(--accent);flex-shrink:0}
+.fr-icon svg{width:15px;height:15px}
+.fr-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.84rem}
+.fr-size{font-family:var(--ff-m);font-size:.7rem;color:var(--ink-soft);flex-shrink:0}
+.fr-remove{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--ink-soft);flex-shrink:0;transition:color .15s,background .15s}
+.fr-remove svg{width:13px;height:13px}
+.fr-remove:hover{color:var(--danger);background:rgba(226,114,91,.14)}
+
+/* KEY */
+.key-row{position:relative;display:flex}
+.key-input{flex:1;background:rgba(255,255,255,.04);border:1.5px solid var(--line);border-radius:var(--r-md);padding:12px 44px 12px 14px;color:var(--ink);font-family:var(--ff-m);font-size:.9rem;outline:none;transition:border-color .2s;width:100%}
+[dir=rtl] .key-input{padding:12px 14px 12px 44px}
+.key-input:focus{border-color:var(--accent)}
+.key-toggle{position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--ink-soft);display:flex}
+[dir=rtl] .key-toggle{right:auto;left:10px}
+.key-toggle:hover{color:var(--ink)}
+.key-toggle svg{width:17px;height:17px}
+.key-actions{display:flex;gap:8px;margin-top:11px;flex-wrap:wrap}
+.btn-soft{background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--ink);border-radius:var(--r-pill);padding:9px 16px;font-size:.8rem;font-weight:600;display:inline-flex;align-items:center;gap:7px;transition:background .2s,border-color .2s;position:relative;overflow:hidden}
+.btn-soft svg{width:14px;height:14px}
+.btn-soft:hover{background:rgba(255,255,255,.09);border-color:var(--line-strong)}
+.key-warn{display:none;margin-top:11px;font-size:.78rem;color:var(--warn);gap:7px;align-items:flex-start;background:rgba(226,152,79,.08);border:1px solid rgba(226,152,79,.25);border-radius:var(--r-sm);padding:10px 12px}
+.key-warn svg{width:15px;height:15px;flex-shrink:0;margin-top:1px}
+
+/* ITERATIONS */
+.iter-top-row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:11px;flex-wrap:wrap}
+.iter-num{width:112px;background:rgba(255,255,255,.04);border:1.5px solid var(--line);border-radius:var(--r-sm);padding:7px 9px;color:var(--ink);font-family:var(--ff-m);font-size:.8rem;text-align:end;outline:none}
+.iter-num:focus{border-color:var(--accent)}
+.band-chip{display:inline-flex;padding:4px 11px;border-radius:999px;font-size:.66rem;font-family:var(--ff-m);border:1px solid;white-space:nowrap}
+.band-min{color:var(--warn);border-color:rgba(226,152,79,.4);background:rgba(226,152,79,.1)}
+.band-good{color:var(--accent);border-color:rgba(63,169,245,.4);background:rgba(63,169,245,.1)}
+.band-strong{color:var(--good);border-color:rgba(111,207,151,.4);background:rgba(111,207,151,.1)}
+.band-extreme{color:#C9A8F2;border-color:rgba(201,168,242,.4);background:rgba(201,168,242,.1)}
+.csl{position:relative;height:26px;display:flex;align-items:center;cursor:pointer;touch-action:none}
+.csl-track{position:relative;width:100%;height:6px;border-radius:999px;background:rgba(255,255,255,.08)}
+.csl-fill{position:absolute;top:0;height:6px;border-radius:999px;background:var(--accent);left:0}
+.csl-thumb{position:absolute;width:18px;height:18px;border-radius:50%;background:var(--ink);border:3px solid var(--accent);top:50%;transform:translate(-50%,-50%);box-shadow:0 2px 10px rgba(0,0,0,.4);left:0}
+[dir=rtl] .csl-thumb{transform:translate(50%,-50%)}
+.csl-endlabels{display:flex;justify-content:space-between;font-family:var(--ff-m);font-size:.64rem;color:var(--ink-soft);margin-top:5px}
+
+/* RUN BUTTON + HINT */
+.run-btn{width:100%;padding:15px;border-radius:var(--r-pill);background:var(--accent);color:var(--accent-ink);font-weight:700;font-size:.94rem;display:flex;align-items:center;justify-content:center;gap:9px;transition:transform .15s,box-shadow .15s,opacity .15s;box-shadow:0 10px 30px -8px rgba(63,169,245,.5);margin-top:4px;position:relative;overflow:hidden}
+.run-btn svg{width:16px;height:16px}
+.run-btn:hover{transform:translateY(-2px);box-shadow:0 14px 36px -6px rgba(63,169,245,.6)}
+.run-btn:disabled{opacity:.55;cursor:not-allowed;transform:none;box-shadow:none}
+
+/* CHRONICLE-STYLE BUTTON TEXT FLIP */
+.flip-label{position:relative;display:block;perspective:120px}
+.flip-label span{display:block}
+.flip-label span:nth-of-type(2){position:absolute;top:0;left:0;width:100%}
+.flip-label em{font-style:normal;display:inline-flex;align-items:center;justify-content:center;gap:6px;width:100%;font:inherit;color:inherit;will-change:transform,opacity;transition:transform .5s cubic-bezier(.645,.045,.355,1),opacity .3s linear .15s}
+.flip-label span:nth-of-type(1) em{transform-origin:top;opacity:1;transform:rotateX(0deg)}
+.flip-label span:nth-of-type(2) em{opacity:0;transform:rotateX(-90deg) scaleX(.9) translate3d(0,8px,0);transform-origin:bottom}
+button:hover .flip-label span:nth-of-type(1) em{opacity:0;transform:rotateX(90deg) scaleX(.9) translate3d(0,-8px,0)}
+button:hover .flip-label span:nth-of-type(2) em{opacity:1;transform:rotateX(0deg) scaleX(1) translateZ(0);transition:transform .65s cubic-bezier(.645,.045,.355,1),opacity .3s linear .22s}
+@media(prefers-reduced-motion:reduce){.flip-label em{transition:none}}
+.hint{margin-top:11px;font-size:.8rem;color:var(--danger);text-align:center;min-height:1.1em}
+
+/* ABOUT / CREDITS */
+.info-panel{padding:26px}
+.info-title{font-family:var(--ff-d);font-size:1.2rem;font-weight:600;margin-bottom:12px}
+.info-panel p{font-size:.86rem;color:var(--ink-mid);margin-bottom:12px}
+.info-panel p:last-child{margin-bottom:0}
+.warn-line{color:var(--warn) !important;font-weight:600}
+.credit-list{list-style:none;display:flex;flex-direction:column;gap:8px;direction:ltr;text-align:left}
+[dir=rtl] .credit-list{text-align:right}
+.credit-list li{font-size:.82rem;color:var(--ink-soft)}
+.credit-list a{color:var(--accent);border-bottom:1px solid rgba(63,169,245,.35);transition:color .2s,border-color .2s}
+.credit-list a:hover{color:var(--ink);border-color:var(--ink)}
+
+/* FOOTER */
+.site-footer{text-align:center;color:var(--ink-soft);font-size:.8rem;padding:8px 0 30px}
+.site-footer a{color:var(--ink);border-bottom:1px solid rgba(63,169,245,.4);transition:color .2s,border-color .2s}
+.site-footer a:hover{color:var(--accent);border-color:var(--accent)}
+.download-app-btn{margin:16px auto 0}
+
+/* PROCESSING OVERLAY */
+.proc-overlay{position:fixed;inset:0;z-index:900;background:rgba(6,7,9,.66);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}
+.proc-overlay.on{opacity:1;pointer-events:auto}
+.proc-card{position:relative;border:1px solid var(--line);border-radius:var(--r-lg);padding:34px;text-align:center;width:min(320px,88vw);box-shadow:0 30px 80px rgba(0,0,0,.5);overflow:hidden}
+.proc-card-content{position:relative;z-index:1}
+.spinner{width:44px;height:44px;border-radius:50%;border:3px solid rgba(255,255,255,.12);border-top-color:var(--accent);margin:0 auto 18px;animation:spin .9s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.proc-verb{font-family:var(--ff-d);font-size:1.1rem;font-weight:600;margin-bottom:5px}
+.proc-name{font-family:var(--ff-m);font-size:.76rem;color:var(--ink-mid);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:9px}
+.proc-count{font-size:.72rem;color:var(--ink-soft)}
+
+/* LANGUAGE MODAL */
+#lang-overlay{position:fixed;inset:0;z-index:990;background:rgba(6,7,9,.6);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}
+#lang-overlay.on{opacity:1;pointer-events:auto}
+.lang-modal{position:relative;border:1px solid var(--line);border-radius:var(--r-lg);padding:26px 22px 22px;width:min(300px,90vw);box-shadow:0 30px 80px rgba(0,0,0,.5);text-align:center;overflow:hidden}
+.lang-modal-content{position:relative;z-index:1}
+.lm-head{margin-bottom:14px}
+.lm-head h3{font-family:var(--ff-d);font-size:1.1rem;font-weight:600;text-align:center}
+.lm-close{position:absolute;top:14px;inset-inline-end:14px;z-index:2;width:28px;height:28px;border-radius:50%;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--ink-mid)}
+.lm-close:hover{color:var(--ink);background:rgba(255,255,255,.06)}
+.lm-close svg{width:13px;height:13px}
+.lang-opt{display:block;width:100%;padding:10px 14px;border-radius:12px;background:transparent;color:var(--ink-mid);font-size:.88rem;text-align:center;transition:background .15s,color .15s;position:relative;overflow:hidden}
+.lang-opt+.lang-opt{margin-top:3px}
+.lang-opt:hover{background:rgba(255,255,255,.06);color:var(--ink)}
+.lang-opt.active{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.lang-apply-btn{width:100%;margin-top:14px;background:var(--accent);color:var(--accent-ink);border-radius:999px;padding:12px;font-weight:700;position:relative;overflow:hidden}
+
+/* NOTIFICATION "FACE" POPUPS — geometry & keyframes preserved as-is */
+.notif-stack{position:fixed;bottom:22px;inset-inline-end:22px;z-index:960;display:flex;flex-direction:column-reverse;gap:14px;align-items:flex-end;pointer-events:none}
+[dir=rtl] .notif-stack{align-items:flex-start}
+.rectangle-pop-up-notification-box{
+  position:relative;width:260px;height:230px;max-width:92vw;border-radius:var(--r-lg);
+  border:1px solid var(--line);
+  box-shadow:0 22px 50px rgba(0,0,0,.45);
+  display:none;flex-direction:column;align-items:center;justify-content:flex-end;overflow:hidden;
+  pointer-events:auto;
+}
+/* Reusable glass sub-layer: every "glassy" surface in the app (this box,
+   proc-card, lang-modal) gets its OWN independent instance of this layer
+   — background + blur live here, never on the element that also holds
+   content — then a positive z-index stacks the content back on top of it.
+   That keeps each surface's glass effect logically separate (so the
+   legacy-compatible fallback vars apply correctly to each one on its own)
+   while still visually reading as one blurred card. Default background
+   below is the "tiny bit glassy" modal tone; notification boxes override
+   it per type just underneath. */
+.glass-sub-bg{
+  position:absolute;inset:0;z-index:0;border-radius:inherit;
+  background:var(--panel-modal);
+  backdrop-filter:blur(var(--glass-blur)) saturate(160%);-webkit-backdrop-filter:blur(var(--glass-blur)) saturate(160%);
+}
+#box-success .glass-sub-bg{background:linear-gradient(155deg,rgba(111,207,151,var(--notif-tint-op)) 0%,var(--panel) 62%)}
+#box-format .glass-sub-bg,#box-auth .glass-sub-bg{background:linear-gradient(155deg,rgba(226,114,91,var(--notif-tint-op)) 0%,var(--panel) 62%)}
+[dir=rtl] #box-success .glass-sub-bg{background:linear-gradient(205deg,rgba(111,207,151,var(--notif-tint-op)) 0%,var(--panel) 62%)}
+[dir=rtl] #box-format .glass-sub-bg,[dir=rtl] #box-auth .glass-sub-bg{background:linear-gradient(205deg,rgba(226,114,91,var(--notif-tint-op)) 0%,var(--panel) 62%)}
+.rectangle-pop-up-notification-face{
+  position:absolute;width:22%;aspect-ratio:1;height:auto;border-radius:50%;border:1px solid #33302b;
+  background:rgba(255,255,255,var(--notif-face-op));backdrop-filter:blur(var(--glass-face-blur));-webkit-backdrop-filter:blur(var(--glass-face-blur));
+  top:11%;left:39%;z-index:2;animation:bounce 1s ease-in infinite;
+}
+.rectangle-pop-up-notification-face2{
+  position:absolute;width:22%;aspect-ratio:1;height:auto;border-radius:50%;border:1px solid #33302b;
+  background:rgba(255,255,255,var(--notif-face-op));backdrop-filter:blur(var(--glass-face-blur));-webkit-backdrop-filter:blur(var(--glass-face-blur));
+  top:11%;left:37.5%;z-index:2;animation:roll 3s ease-in-out infinite;
+}
+.rectangle-pop-up-notification-eye{position:absolute;width:5px;height:5px;background:#33302b;border-radius:50%;top:30%;left:20%}
+.rectangle-pop-up-notification-eye.right{left:68%}
+.rectangle-pop-up-notification-mouth{position:absolute;top:33%;left:41%;width:7px;height:7px;border-radius:50%}
+.rectangle-pop-up-notification-mouth.happy{border:2px solid;border-color:transparent #33302b #33302b transparent;transform:rotate(45deg)}
+.rectangle-pop-up-notification-mouth.sad{top:39%;border:2px solid;border-color:#33302b transparent transparent #33302b;transform:rotate(45deg)}
+.rectangle-pop-up-notification-shadow{position:absolute;width:21%;height:3%;opacity:.5;background:#33302b;left:40%;top:33%;border-radius:50%;z-index:1}
+.rectangle-pop-up-notification-shadow.move{animation:move 3s ease-in-out infinite}
+.rectangle-pop-up-notification-shadow.scale{animation:scale 1s ease-in infinite}
+@keyframes bounce{50%{transform:translateY(-10px)}}
+@keyframes roll{0%{transform:rotate(0deg);left:25%}50%{left:60%;transform:rotate(168deg)}100%{transform:rotate(0deg);left:25%}}
+@keyframes move{0%{left:25%}50%{left:60%}100%{left:25%}}
+@keyframes scale{50%{transform:scale(0.9)}}
+.rectangle-pop-up-notification-message{position:absolute;width:100%;text-align:center;height:40%;top:37%;padding:0 14px;color:#fff;font-family:var(--ff-b);z-index:3;transform:translateY(10px)}
+.notif-title{font-family:var(--ff-d);font-size:1.05rem;font-weight:700;margin-bottom:5px}
+.notif-msg{font-size:.74rem;line-height:1.4;opacity:.95}
+.rectangle-pop-up-notification-button-box{
+  position:absolute;width:50%;height:15%;top:76%;left:25%;z-index:3;
+  background:transparent;border:2px solid #fff;color:#fff;font-size:11px;font-weight:700;letter-spacing:.3px;
+  border-radius:20px;outline:0;overflow:hidden;transition:all .3s ease;
+}
+.rectangle-pop-up-notification-button-box:hover{background:#fff;color:#161920;transform:scale(1.06)}
+/* Entrance/exit: slide in from the trailing screen edge with a small
+   overshoot bounce, mirrored for RTL so it always enters from the side the
+   notif-stack itself is pinned to. */
+@keyframes notifSlideInLTR{0%{transform:translateX(150%);opacity:0}60%{transform:translateX(-12%);opacity:1}100%{transform:translateX(0);opacity:1}}
+@keyframes notifSlideOutLTR{0%{transform:translateX(0);opacity:1}40%{transform:translateX(-12%);opacity:1}100%{transform:translateX(150%);opacity:0}}
+@keyframes notifSlideInRTL{0%{transform:translateX(-150%);opacity:0}60%{transform:translateX(12%);opacity:1}100%{transform:translateX(0);opacity:1}}
+@keyframes notifSlideOutRTL{0%{transform:translateX(0);opacity:1}40%{transform:translateX(12%);opacity:1}100%{transform:translateX(-150%);opacity:0}}
+.rectangle-pop-up-notification-box.slide-in{animation:notifSlideInLTR .4s ease forwards}
+.rectangle-pop-up-notification-box.slide-out{animation:notifSlideOutLTR .4s ease forwards}
+[dir=rtl] .rectangle-pop-up-notification-box.slide-in{animation-name:notifSlideInRTL}
+[dir=rtl] .rectangle-pop-up-notification-box.slide-out{animation-name:notifSlideOutRTL}
+
+/* RESPONSIVE / MOTION */
+@media(max-width:480px){
+  .hero-stats{gap:18px}
+  .file-row{flex-wrap:wrap}
+}
+@media(prefers-reduced-motion:reduce){
+  *:not(.rectangle-pop-up-notification-face):not(.rectangle-pop-up-notification-face2):not(.rectangle-pop-up-notification-shadow),
+  *::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+ <div class="brand">
+  <span class="brand-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg></span>
+  <span class="brand-text"><span class="brand-name">In-Browser File Encrypter</span><span class="brand-badge">Claude Version</span></span>
+ </div>
+ <button class="lang-btn" id="lang-btn" aria-label="Language" type="button">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M2 12h20"></path><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10A15.3 15.3 0 0 1 12 2z"></path></svg>
+ </button>
+</header>
+
+<main class="page-wrap">
+
+ <section class="hero">
+  <p class="eyebrow" id="eyebrow-text">Local, client-side encryption</p>
+  <h1 class="hero-title" id="hero-title">Locks your files before they ever leave this device.</h1>
+  <p class="hero-lede" id="hero-lede">AES-256-GCM, with a key derived using PBKDF2-HMAC-SHA512 — entirely inside your browser. Nothing is ever uploaded.</p>
+  <div class="hero-stats">
+   <div class="hstat"><strong>AES-256</strong><span id="stat-cipher">GCM cipher</span></div>
+   <div class="hstat"><strong>SHA-512</strong><span id="stat-kdf">PBKDF2 key stretch</span></div>
+   <div class="hstat"><strong>0</strong><span id="stat-servers">servers touched</span></div>
+  </div>
+ </section>
+
+ <section class="tool-card glass-panel">
+  <div class="mode-tabs">
+   <button type="button" class="mode-tab active" id="tab-encrypt"><span id="tab-encrypt-label" class="flip-label"><span><em>Encrypt</em></span><span><em>Encrypt</em></span></span></button>
+   <button type="button" class="mode-tab" id="tab-decrypt"><span id="tab-decrypt-label" class="flip-label"><span><em>Decrypt</em></span><span><em>Decrypt</em></span></span></button>
+  </div>
+
+  <div class="field-block">
+   <span class="field-label" id="files-heading">Files</span>
+   <div class="dropzone" id="dropzone" tabindex="0" role="button">
+    <span class="dz-icon" id="dz-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg></span>
+    <div class="dz-title" id="dz-title">Drop files here</div>
+    <div class="dz-sub" id="dz-sub">or click to browse</div>
+   </div>
+   <div class="file-list" id="file-list"><p class="files-empty">No files selected yet.</p></div>
+  </div>
+
+  <div class="field-block">
+   <span class="field-label" id="key-label">Encryption key</span>
+   <div class="key-row">
+    <input type="password" class="key-input" id="key-input" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off" placeholder="Enter a strong key, or generate one">
+    <button type="button" class="key-toggle" id="key-toggle" aria-label="Show key"><span id="key-eye-icon"></span></button>
+   </div>
+   <div class="key-actions">
+    <button type="button" class="btn-soft" id="gen-key-btn">
+     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"></rect><circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none"></circle><circle cx="16" cy="8" r="1.2" fill="currentColor" stroke="none"></circle><circle cx="8" cy="16" r="1.2" fill="currentColor" stroke="none"></circle><circle cx="16" cy="16" r="1.2" fill="currentColor" stroke="none"></circle><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"></circle></svg>
+     <span id="gen-key-label" class="flip-label"><span><em>Generate a strong key</em></span><span><em>Generate a strong key</em></span></span>
+    </button>
+    <button type="button" class="btn-soft" id="copy-key-btn">
+     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+     <span id="copy-key-label" class="flip-label"><span><em>Copy</em></span><span><em>Copy</em></span></span>
+    </button>
+    <button type="button" class="btn-soft" id="clear-key-btn">
+     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"></path></svg>
+     <span id="clear-key-label" class="flip-label"><span><em>Clear</em></span><span><em>Clear</em></span></span>
+    </button>
+   </div>
+   <div class="key-warn" id="key-warn" style="display: none;">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+    <span id="key-warn-text">Save this key somewhere safe — if you lose it, this file can never be decrypted.</span>
+   </div>
+   <p class="field-sub" id="key-manager-hint">Your browser may offer to save this as a password. Decline if you don’t want it synced elsewhere.</p>
+  </div>
+
+  <div class="field-block" id="iter-section">
+   <div class="iter-top-row">
+    <span class="field-label" id="iter-label" style="margin-bottom:0">Key stretching</span>
+    <div style="display:flex;align-items:center;gap:10px">
+     <span class="band-chip band-good" id="band-chip">Good</span>
+     <input type="text" inputmode="numeric" class="iter-num" id="iter-num">
+    </div>
+   </div>
+   <div class="csl" id="iter-slider" role="slider" aria-label="PBKDF2 iterations" aria-valuemin="210000" aria-valuemax="2000000" aria-valuenow="600000" tabindex="0">
+    <div class="csl-track" id="iter-track"><div class="csl-fill" id="iter-fill" style="left: 0px; right: auto; width: 21.7877%;"></div><div class="csl-thumb" id="iter-thumb" style="left: 21.7877%; right: auto;"></div></div>
+   </div>
+   <div class="csl-endlabels"><span>210K</span><span>2M</span></div>
+   <p class="field-sub" id="iter-sub">PBKDF2-SHA512 iterations. Higher is slower to run — and slower to crack.</p>
+  </div>
+
+  <button type="button" class="run-btn" id="run-btn">
+   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"></rect><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>
+   <span id="run-btn-label" class="flip-label"><span><em>Encrypt files</em></span><span><em>Encrypt files</em></span></span>
+  </button>
+  <p class="hint" id="hint-text" role="alert" aria-live="polite"></p>
+ </section>
+
+ <section class="glass-panel info-panel">
+  <h2 class="info-title" id="about-title">About</h2>
+  <p id="about-body">In-Browser File Encrypter encrypts files with AES-256-GCM, an authenticated cipher, using a key derived from your password with PBKDF2-HMAC-SHA512. Everything happens locally in this browser tab — your files and key are never sent anywhere, and the page's Content-Security-Policy blocks network requests outright. For extra peace of mind, you can disconnect from the internet once the page has loaded.</p>
+  <p class="warn-line" id="about-warn1">This application is provided with no warranty or guarantee of any kind.</p>
+  <p class="warn-line" id="about-warn2">Use it at your own risk, and keep a backup of anything important.</p>
+ </section>
+
+ <section class="glass-panel info-panel">
+    <h2 class="info-title" id="credits-title">Credits</h2>
+
+    <ul class="credit-list" id="credit-list"><li><a href="https://codepen.io/mohaiman/pen/MQqMyo" target="_blank" rel="noopener noreferrer">Pure Css Animated Background</a> by <a href="https://codepen.io/mohaiman" target="_blank" rel="noopener noreferrer">Mohammad Abdul Mohaiman</a></li><li><a href="https://codepen.io/__e8e0f2257b/pen/NxMpGq" target="_blank" rel="noopener noreferrer">Animated Login Form</a> by <a href="https://codepen.io/__e8e0f2257b" target="_blank" rel="noopener noreferrer">Munsif Mujtaba</a></li><li><a href="https://codepen.io/sowg/pen/qBXjXoE" target="_blank" rel="noopener noreferrer">Finance Mobile Application-UX/UI Design Screen One</a> by <a href="https://codepen.io/sowg" target="_blank" rel="noopener noreferrer">S G</a></li><li><a href="https://codepen.io/FlorinPop17/pen/vPKWjd" target="_blank" rel="noopener noreferrer">Weekly Coding Challenge #1 - Double slider Sign in/up Form - Desktop Only</a> by <a href="https://codepen.io/FlorinPop17" target="_blank" rel="noopener noreferrer">Florin Pop</a></li><li><a href="https://codepen.io/ferhatatagun/pen/oNNGdyX" target="_blank" rel="noopener noreferrer">Custom Language Selector</a> by <a href="https://codepen.io/ferhatatagun" target="_blank" rel="noopener noreferrer">Ferhat Atagün</a></li><li><a href="https://codepen.io/HighFlyer/pen/WNXRZBv" target="_blank" rel="noopener noreferrer">Neon Button</a> by <a href="https://codepen.io/HighFlyer" target="_blank" rel="noopener noreferrer">Thea</a></li><li><a href="https://codepen.io/nikhil8krishnan/pen/WvYPvv" target="_blank" rel="noopener noreferrer">Fixed table header</a> by <a href="https://codepen.io/nikhil8krishnan" target="_blank" rel="noopener noreferrer">Nikhil Krishnan</a></li><li><a href="https://codepen.io/FlorinPop17/pen/xxORmaB" target="_blank" rel="noopener noreferrer">Push Notifications</a> by <a href="https://codepen.io/FlorinPop17" target="_blank" rel="noopener noreferrer">Florin Pop</a></li><li><a href="https://codepen.io/ash_creator/pen/oNyNbNO" target="_blank" rel="noopener noreferrer">パステルドローなボタン</a> by <a href="https://codepen.io/ash_creator" target="_blank" rel="noopener noreferrer">あしざわ - Webクリエイター</a></li><li><a href="https://codepen.io/ash_creator/pen/zYaPZLB" target="_blank" rel="noopener noreferrer">すりガラスなプロフィールカード</a> by <a href="https://codepen.io/ash_creator" target="_blank" rel="noopener noreferrer">あしざわ - Webクリエイター</a></li><li><a href="https://codepen.io/FlorinPop17/pen/yLyzmLZ" target="_blank" rel="noopener noreferrer">Custom Progress Bar</a> by <a href="https://codepen.io/FlorinPop17" target="_blank" rel="noopener noreferrer">Florin Pop</a></li><li><a href="https://codepen.io/juliepark/pen/vjMOKQ" target="_blank" rel="noopener noreferrer">Daily UI#011 | Flash Message (Error/Success)</a> by <a href="https://codepen.io/juliepark" target="_blank" rel="noopener noreferrer">Julie Park</a></li><li><a href="https://codepen.io/Haaguitos/pen/OJrVZdJ" target="_blank" rel="noopener noreferrer">Chronicle Button</a> by <a href="https://codepen.io/Haaguitos" target="_blank" rel="noopener noreferrer">Haaguitos</a></li></ul>
+  </section>
+</main>
+
+<footer class="site-footer">
+ <span id="made-by-text">Made by</span> <a target="_blank" rel="noopener noreferrer" href="https://maxim-bortnikov.netlify.app/">Maxim Bortnikov</a>
+ <div>
+  <button type="button" class="btn-soft download-app-btn" id="download-app-btn">
+   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+   <span id="download-app-label" class="flip-label"><span><em>Download this app</em></span><span><em>Download this app</em></span></span>
+  </button>
+ </div>
+</footer>
+
+<div class="proc-overlay" id="proc-overlay">
+ <div class="proc-card">
+  <div class="glass-sub-bg"></div>
+  <div class="proc-card-content">
+   <div class="spinner"></div>
+   <div class="proc-verb" id="proc-verb"></div>
+   <div class="proc-name" id="proc-name"></div>
+   <div class="proc-count" id="proc-count"></div>
+  </div>
+ </div>
+</div>
+
+<div class="notif-stack" id="notif-stack">
+ <div class="rectangle-pop-up-notification-box" id="box-auth" style="display: none;">
+  <div class="glass-sub-bg"></div>
+  <div class="rectangle-pop-up-notification-face2">
+   <div class="rectangle-pop-up-notification-eye"></div>
+   <div class="rectangle-pop-up-notification-eye right"></div>
+   <div class="rectangle-pop-up-notification-mouth sad"></div>
+  </div>
+  <div class="rectangle-pop-up-notification-shadow move"></div>
+  <div class="rectangle-pop-up-notification-message">
+   <div class="notif-title" id="auth-title"></div>
+   <p class="notif-msg" id="auth-msg"></p>
+  </div>
+  <button type="button" class="rectangle-pop-up-notification-button-box" id="auth-ok"><span id="auth-ok-label" class="flip-label"><span><em>OK</em></span><span><em>OK</em></span></span></button>
+ </div>
+ <div class="rectangle-pop-up-notification-box" id="box-format" style="display: none;">
+  <div class="glass-sub-bg"></div>
+  <div class="rectangle-pop-up-notification-face2">
+   <div class="rectangle-pop-up-notification-eye"></div>
+   <div class="rectangle-pop-up-notification-eye right"></div>
+   <div class="rectangle-pop-up-notification-mouth sad"></div>
+  </div>
+  <div class="rectangle-pop-up-notification-shadow move"></div>
+  <div class="rectangle-pop-up-notification-message">
+   <div class="notif-title" id="format-title"></div>
+   <p class="notif-msg" id="format-msg"></p>
+  </div>
+  <button type="button" class="rectangle-pop-up-notification-button-box" id="format-ok"><span id="format-ok-label" class="flip-label"><span><em>OK</em></span><span><em>OK</em></span></span></button>
+ </div>
+ <div class="rectangle-pop-up-notification-box" id="box-success" style="display: none;">
+  <div class="glass-sub-bg"></div>
+  <div class="rectangle-pop-up-notification-face">
+   <div class="rectangle-pop-up-notification-eye"></div>
+   <div class="rectangle-pop-up-notification-eye right"></div>
+   <div class="rectangle-pop-up-notification-mouth happy"></div>
+  </div>
+  <div class="rectangle-pop-up-notification-shadow scale"></div>
+  <div class="rectangle-pop-up-notification-message">
+   <div class="notif-title" id="success-title"></div>
+   <p class="notif-msg" id="success-msg"></p>
+  </div>
+  <button type="button" class="rectangle-pop-up-notification-button-box" id="success-ok"><span id="success-ok-label" class="flip-label"><span><em>OK</em></span><span><em>OK</em></span></span></button>
+ </div>
+</div>
+
+<div id="lang-overlay">
+ <div class="lang-modal">
+  <div class="glass-sub-bg"></div>
+  <button type="button" class="lm-close" id="lang-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+  <div class="lang-modal-content">
+   <div class="lm-head">
+    <h3 id="lang-modal-title">Language</h3>
+   </div>
+   <div id="lang-list"><button type="button" class="lang-opt active"><span class="flip-label"><span><em>English</em></span><span><em>English</em></span></span></button><button type="button" class="lang-opt"><span class="flip-label"><span><em>עברית</em></span><span><em>עברית</em></span></span></button><button type="button" class="lang-opt"><span class="flip-label"><span><em>Español</em></span><span><em>Español</em></span></span></button><button type="button" class="lang-opt"><span class="flip-label"><span><em>Deutsch</em></span><span><em>Deutsch</em></span></span></button></div>
+   <button type="button" class="lang-apply-btn" id="lang-apply"><span id="lang-apply-label" class="flip-label"><span><em>OK</em></span><span><em>OK</em></span></span></button>
+  </div>
+ </div>
+</div>
+
+<input type="file" id="file-input" multiple="" hidden="">
+
+<script>
+(function(){
+'use strict';
+
+/* Legacy-compatible glassmorphism: run this check first, before anything
+   else, so the html.no-backdrop-filter fallback (see :root CSS) is applied
+   before the page paints rather than flashing the wrong look. Same
+   CSS.supports() feature test FancySlider's buildBackdropStyle() uses. */
+(function(){
+  var supportsBlur = !!(window.CSS && CSS.supports &&
+    (CSS.supports('backdrop-filter','blur(2px)') || CSS.supports('-webkit-backdrop-filter','blur(2px)')));
+  if(!supportsBlur) document.documentElement.classList.add('no-backdrop-filter');
+})();
+
+/* ═══════════════════════ ICONS ═══════════════════════ */
+var ICON_EYE='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg>';
+var ICON_EYE_OFF='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 19c-7 0-11-7-11-7a21.6 21.6 0 0 1 5.06-5.94M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 7 11 7a21.6 21.6 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+var ICON_LOCK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+var ICON_LOCK_OPEN='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.4-2"/></svg>';
+var ICON_FILE='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/></svg>';
+var ICON_X='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+
+/* ═══════════════════════ TRANSLATIONS ═══════════════════════ */
+var TR = {
+en:{
+ tagline_eyebrow:"Local, client-side encryption",
+ hero_title:"Locks your files before they ever leave this device.",
+ hero_lede:"AES-256-GCM, with a key derived using PBKDF2-HMAC-SHA512 \u2014 entirely inside your browser. Nothing is ever uploaded.",
+ stat_cipher:"GCM cipher", stat_kdf:"PBKDF2 key stretch", stat_servers:"servers touched",
+ mode_encrypt:"Encrypt", mode_decrypt:"Decrypt",
+ files_heading:"Files",
+ drop_title:"Drop files here", drop_title_decrypt:"Drop .ibfe files here", drop_sub:"or click to browse",
+ files_empty:"No files selected yet.", remove_file:"Remove",
+ key_label:"Encryption key", key_placeholder:"Enter a strong key, or generate one",
+ generate_key:"Generate a strong key", copy_key:"Copy", copied:"Copied",
+ key_warning:"Save this key somewhere safe \u2014 if you lose it, this file can never be decrypted.",
+ clear_key:"Clear", key_manager_hint:"Your browser may offer to save this as a password. Decline if you don\u2019t want it synced elsewhere.",
+ iterations_label:"Key stretching",
+ iterations_sub:"PBKDF2-SHA512 iterations. Higher is slower to run \u2014 and slower to crack.",
+ iterations_band_min:"Minimum", iterations_band_good:"Good", iterations_band_strong:"Strong", iterations_band_extreme:"Very strong",
+ run_encrypt:"Encrypt files", run_decrypt:"Decrypt files",
+ processing_encrypt:"Encrypting", processing_decrypt:"Decrypting", processing_file_of:"File {i} of {n}",
+ notify_success_title:"Done", notify_success_one:"1 file processed and downloaded.", notify_success_many:"{n} files processed and downloaded.",
+ notify_auth_title:"Couldn\u2019t decrypt", notify_auth_msg:"Wrong key, or the file was altered or corrupted.",
+ notify_format_title:"Not a valid file", notify_format_msg:"This file wasn\u2019t encrypted with this app, or its header is damaged.",
+ notify_partial_note:"{n} other file(s) were processed successfully.",
+ ok:"OK", lang_title:"Language", lang_apply:"Apply",
+ about_title:"About",
+ about_body:"In-Browser File Encrypter encrypts files with AES-256-GCM, an authenticated cipher, using a key derived from your password with PBKDF2-HMAC-SHA512. Everything happens locally in this browser tab \u2014 your files and key are never sent anywhere, and the page's Content-Security-Policy blocks network requests outright. For extra peace of mind, you can disconnect from the internet once the page has loaded.",
+ about_warn1:"This application is provided with no warranty or guarantee of any kind.",
+ about_warn2:"Use it at your own risk, and keep a backup of anything important.",
+ credits_title:"Credits", made_by:"Made by", download_app:"Download this app",
+ need_files:"Add at least one file first.", need_key:"Enter or generate a key first."
+},
+he:{
+ tagline_eyebrow:"\u05d4\u05e6\u05e4\u05e0\u05d4 \u05de\u05e7\u05d5\u05de\u05d9\u05ea, \u05d1\u05e6\u05d3 \u05d4\u05dc\u05e7\u05d5\u05d7",
+ hero_title:"\u05e0\u05d5\u05e2\u05dc \u05d0\u05ea \u05d4\u05e7\u05d1\u05e6\u05d9\u05dd \u05e9\u05dc\u05da \u05dc\u05e4\u05e0\u05d9 \u05e9\u05d4\u05dd \u05e2\u05d5\u05d6\u05d1\u05d9\u05dd \u05d0\u05ea \u05d4\u05de\u05db\u05e9\u05d9\u05e8.",
+ hero_lede:"AES-256-GCM \u05e2\u05dd \u05de\u05e4\u05ea\u05d7 \u05e9\u05e0\u05d2\u05d6\u05e8 \u05d1\u05d0\u05de\u05e6\u05e2\u05d5\u05ea PBKDF2-HMAC-SHA512, \u05d4\u05db\u05d5\u05dc \u05d1\u05ea\u05d5\u05da \u05d4\u05d3\u05e4\u05d3\u05e4\u05df \u05e9\u05dc\u05da. \u05e9\u05d5\u05dd \u05d3\u05d1\u05e8 \u05dc\u05d0 \u05de\u05d5\u05e2\u05dc\u05d4 \u05dc\u05e9\u05e8\u05ea, \u05d0\u05e3 \u05e4\u05e2\u05dd.",
+ stat_cipher:"\u05e6\u05d5\u05e4\u05df GCM", stat_kdf:"\u05de\u05ea\u05d9\u05d7\u05ea \u05de\u05e4\u05ea\u05d7 PBKDF2", stat_servers:"\u05e9\u05e8\u05ea\u05d9\u05dd \u05de\u05e2\u05d5\u05e8\u05d1\u05d9\u05dd",
+ mode_encrypt:"\u05d4\u05e6\u05e4\u05e0\u05d4", mode_decrypt:"\u05e4\u05e2\u05e0\u05d5\u05d7",
+ files_heading:"\u05e7\u05d1\u05e6\u05d9\u05dd",
+ drop_title:"\u05d2\u05e8\u05e8\u05d5 \u05e7\u05d1\u05e6\u05d9\u05dd \u05dc\u05db\u05d0\u05df", drop_title_decrypt:"\u05d2\u05e8\u05e8\u05d5 \u05dc\u05db\u05d0\u05df \u05e7\u05d5\u05d1\u05e6\u05d9 .ibfe", drop_sub:"\u05d0\u05d5 \u05dc\u05d7\u05e6\u05d5 \u05dc\u05d1\u05d7\u05d9\u05e8\u05d4",
+ files_empty:"\u05e2\u05d3\u05d9\u05d9\u05df \u05dc\u05d0 \u05e0\u05d1\u05d7\u05e8\u05d5 \u05e7\u05d1\u05e6\u05d9\u05dd.", remove_file:"\u05d4\u05e1\u05e8\u05d4",
+ key_label:"\u05de\u05e4\u05ea\u05d7 \u05d4\u05e6\u05e4\u05e0\u05d4", key_placeholder:"\u05d4\u05d6\u05d9\u05e0\u05d5 \u05de\u05e4\u05ea\u05d7 \u05d7\u05d6\u05e7 \u05d0\u05d5 \u05e6\u05e8\u05d5 \u05d0\u05d7\u05d3",
+ generate_key:"\u05e6\u05d5\u05e8 \u05de\u05e4\u05ea\u05d7 \u05d7\u05d6\u05e7", copy_key:"\u05d4\u05e2\u05ea\u05e7\u05d4", copied:"\u05d4\u05d5\u05e2\u05ea\u05e7",
+ key_warning:"\u05e9\u05de\u05e8\u05d5 \u05d0\u05ea \u05d4\u05de\u05e4\u05ea\u05d7 \u05d1\u05de\u05e7\u05d5\u05dd \u05d1\u05d8\u05d5\u05d7 \u2014 \u05d0\u05dd \u05ea\u05d0\u05d1\u05d3\u05d5 \u05d0\u05d5\u05ea\u05d5, \u05dc\u05d0 \u05e0\u05d9\u05ea\u05df \u05d9\u05d4\u05d9\u05d4 \u05dc\u05e4\u05e2\u05e0\u05d7 \u05d0\u05ea \u05d4\u05e7\u05d5\u05d1\u05e5 \u05dc\u05e2\u05d5\u05dc\u05dd.",
+ clear_key:"\u05e0\u05e7\u05d4", key_manager_hint:"\u05d4\u05d3\u05e4\u05d3\u05e4\u05df \u05e2\u05e9\u05d5\u05d9 \u05dc\u05d4\u05e6\u05d9\u05e2 \u05dc\u05e9\u05de\u05d5\u05e8 \u05d6\u05d0\u05ea \u05db\u05e1\u05d9\u05e1\u05de\u05d4. \u05d3\u05d7\u05d5 \u05d0\u05dd \u05d0\u05ea\u05dd \u05dc\u05d0 \u05e8\u05d5\u05e6\u05d9\u05dd \u05e9\u05d6\u05d4 \u05d9\u05d5\u05e1\u05e0\u05db\u05e8\u05df \u05dc\u05de\u05e7\u05d5\u05dd \u05d0\u05d7\u05e8.",
+ iterations_label:"\u05de\u05ea\u05d9\u05d7\u05ea \u05de\u05e4\u05ea\u05d7",
+ iterations_sub:"\u05de\u05e1\u05e4\u05e8 \u05d4\u05d0\u05d9\u05d8\u05e8\u05e6\u05d9\u05d5\u05ea \u05e9\u05dc PBKDF2-SHA512. \u05db\u05db\u05dc \u05e9\u05d9\u05d5\u05ea\u05e8, \u05db\u05da \u05d0\u05d9\u05d8\u05d9 \u05d9\u05d5\u05ea\u05e8 \u05dc\u05d4\u05e8\u05e6\u05d4 \u2014 \u05d5\u05d2\u05dd \u05e7\u05e9\u05d4 \u05d9\u05d5\u05ea\u05e8 \u05dc\u05e4\u05e6\u05d9\u05d7.",
+ iterations_band_min:"\u05de\u05d9\u05e0\u05d9\u05de\u05d5\u05dd", iterations_band_good:"\u05d8\u05d5\u05d1", iterations_band_strong:"\u05d7\u05d6\u05e7", iterations_band_extreme:"\u05d7\u05d6\u05e7 \u05de\u05d0\u05d5\u05d3",
+ run_encrypt:"\u05d4\u05e6\u05e4\u05df \u05e7\u05d1\u05e6\u05d9\u05dd", run_decrypt:"\u05e4\u05e2\u05e0\u05d7 \u05e7\u05d1\u05e6\u05d9\u05dd",
+ processing_encrypt:"\u05de\u05e6\u05e4\u05d9\u05df", processing_decrypt:"\u05de\u05e4\u05e2\u05e0\u05d7", processing_file_of:"\u05e7\u05d5\u05d1\u05e5 {i} \u05de\u05ea\u05d5\u05da {n}",
+ notify_success_title:"\u05d1\u05d5\u05e6\u05e2", notify_success_one:"\u05e7\u05d5\u05d1\u05e5 \u05d0\u05d7\u05d3 \u05e2\u05d5\u05d1\u05d3 \u05d5\u05d4\u05d5\u05e8\u05d3.", notify_success_many:"{n} \u05e7\u05d1\u05e6\u05d9\u05dd \u05e2\u05d5\u05d1\u05d3\u05d5 \u05d5\u05d4\u05d5\u05e8\u05d3\u05d5.",
+ notify_auth_title:"\u05dc\u05d0 \u05e0\u05d9\u05ea\u05df \u05dc\u05e4\u05e2\u05e0\u05d7", notify_auth_msg:"\u05de\u05e4\u05ea\u05d7 \u05e9\u05d2\u05d5\u05d9, \u05d0\u05d5 \u05e9\u05d4\u05e7\u05d5\u05d1\u05e5 \u05e9\u05d5\u05e0\u05d4 \u05d0\u05d5 \u05e0\u05e4\u05d2\u05dd.",
+ notify_format_title:"\u05e7\u05d5\u05d1\u05e5 \u05dc\u05d0 \u05ea\u05e7\u05d9\u05df", notify_format_msg:"\u05e7\u05d5\u05d1\u05e5 \u05d6\u05d4 \u05dc\u05d0 \u05d4\u05d5\u05e6\u05e4\u05df \u05d1\u05d0\u05e4\u05dc\u05d9\u05e7\u05e6\u05d9\u05d4 \u05d6\u05d5, \u05d0\u05d5 \u05e9\u05d4\u05db\u05d5\u05ea\u05e8\u05ea \u05e9\u05dc\u05d5 \u05e4\u05d2\u05d5\u05de\u05d4.",
+ notify_partial_note:"{n} \u05e7\u05d1\u05e6\u05d9\u05dd \u05e0\u05d5\u05e1\u05e4\u05d9\u05dd \u05e2\u05d5\u05d1\u05d3\u05d5 \u05d1\u05d4\u05e6\u05dc\u05d7\u05d4.",
+ ok:"\u05d0\u05d5\u05e7\u05d9\u05d9", lang_title:"\u05e9\u05e4\u05d4", lang_apply:"\u05d4\u05d7\u05dc",
+ about_title:"\u05d0\u05d5\u05d3\u05d5\u05ea",
+ about_body:"In-Browser File Encrypter \u05de\u05e6\u05e4\u05d9\u05e0\u05d4 \u05e7\u05d1\u05e6\u05d9\u05dd \u05d1\u05d0\u05de\u05e6\u05e2\u05d5\u05ea AES-256-GCM, \u05e6\u05d5\u05e4\u05df \u05de\u05d0\u05d5\u05de\u05ea, \u05e2\u05dd \u05de\u05e4\u05ea\u05d7 \u05e9\u05e0\u05d2\u05d6\u05e8 \u05de\u05d4\u05e1\u05d9\u05e1\u05de\u05d4 \u05e9\u05dc\u05db\u05dd \u05d1\u05d0\u05de\u05e6\u05e2\u05d5\u05ea PBKDF2-HMAC-SHA512. \u05d4\u05db\u05d5\u05dc \u05e7\u05d5\u05e8\u05d4 \u05de\u05e7\u05d5\u05de\u05d9\u05ea \u05d1\u05db\u05e8\u05d8\u05d9\u05e1\u05d9\u05d9\u05d4 \u05d4\u05d6\u05d5 \u2014 \u05d4\u05e7\u05d1\u05e6\u05d9\u05dd \u05d5\u05d4\u05de\u05e4\u05ea\u05d7 \u05e9\u05dc\u05db\u05dd \u05d0\u05d9\u05e0\u05dd \u05e0\u05e9\u05dc\u05d7\u05d9\u05dd \u05dc\u05e9\u05d5\u05dd \u05de\u05e7\u05d5\u05dd, \u05d5\u05de\u05d3\u05d9\u05e0\u05d9\u05d5\u05ea \u05d4\u05d0\u05d1\u05d8\u05d7\u05d4 \u05e9\u05dc \u05d4\u05d3\u05e3 \u05d7\u05d5\u05e1\u05de\u05d5\u05ea \u05e4\u05e0\u05d9\u05d9\u05d5\u05ea \u05e8\u05e9\u05ea \u05dc\u05d2\u05de\u05e8\u05d9. \u05dc\u05e9\u05e7\u05d8 \u05e0\u05e4\u05e9 \u05e0\u05d5\u05e1\u05e3, \u05d0\u05e4\u05e9\u05e8 \u05dc\u05d4\u05ea\u05e0\u05ea\u05e7 \u05de\u05d4\u05d0\u05d9\u05e0\u05d8\u05e8\u05e0\u05d8 \u05dc\u05d0\u05d7\u05e8 \u05d8\u05e2\u05d9\u05e0\u05ea \u05d4\u05d3\u05e3.",
+ about_warn1:"\u05d9\u05d9\u05e9\u05d5\u05dd \u05d6\u05d4 \u05de\u05e1\u05d5\u05e4\u05e7 \u05dc\u05dc\u05d0 \u05d0\u05d7\u05e8\u05d9\u05d5\u05ea \u05d0\u05d5 \u05e2\u05e8\u05d1\u05d5\u05ea \u05de\u05db\u05dc \u05e1\u05d5\u05d2.",
+ about_warn2:"\u05d4\u05e9\u05d9\u05de\u05d5\u05e9 \u05d1\u05d5 \u05e2\u05dc \u05d0\u05d7\u05e8\u05d9\u05d5\u05ea\u05db\u05dd \u05d1\u05dc\u05d1\u05d3, \u05d5\u05de\u05d5\u05de\u05dc\u05e5 \u05dc\u05e9\u05de\u05d5\u05e8 \u05e2\u05d5\u05ea\u05e7 \u05d2\u05d9\u05d1\u05d5\u05d9 \u05dc\u05db\u05dc \u05d3\u05d1\u05e8 \u05d7\u05e9\u05d5\u05d1.",
+ credits_title:"\u05e7\u05e8\u05d3\u05d9\u05d8\u05d9\u05dd", made_by:"\u05e0\u05d5\u05e6\u05e8 \u05e2\u05dc \u05d9\u05d3\u05d9", download_app:"\u05d4\u05d5\u05e8\u05d9\u05d3\u05d5 \u05d0\u05ea \u05d4\u05d0\u05e4\u05dc\u05d9\u05e7\u05e6\u05d9\u05d4",
+ need_files:"\u05d4\u05d5\u05e1\u05d9\u05e4\u05d5 \u05dc\u05e4\u05d7\u05d5\u05ea \u05e7\u05d5\u05d1\u05e5 \u05d0\u05d7\u05d3.", need_key:"\u05d4\u05d6\u05d9\u05e0\u05d5 \u05d0\u05d5 \u05e6\u05e8\u05d5 \u05de\u05e4\u05ea\u05d7 \u05ea\u05d7\u05d9\u05dc\u05d4."
+},
+es:{
+ tagline_eyebrow:"Cifrado local, en tu propio navegador",
+ hero_title:"Bloquea tus archivos antes de que salgan de este equipo.",
+ hero_lede:"AES-256-GCM, con una clave derivada mediante PBKDF2-HMAC-SHA512, todo dentro de tu navegador. Nada se sube nunca a un servidor.",
+ stat_cipher:"cifrado GCM", stat_kdf:"estiramiento PBKDF2", stat_servers:"servidores implicados",
+ mode_encrypt:"Cifrar", mode_decrypt:"Descifrar",
+ files_heading:"Archivos",
+ drop_title:"Suelta los archivos aqu\u00ed", drop_title_decrypt:"Suelta aqu\u00ed los archivos .ibfe", drop_sub:"o haz clic para explorar",
+ files_empty:"A\u00fan no se ha seleccionado ning\u00fan archivo.", remove_file:"Quitar",
+ key_label:"Clave de cifrado", key_placeholder:"Escribe una clave segura o genera una",
+ generate_key:"Generar una clave segura", copy_key:"Copiar", copied:"Copiado",
+ key_warning:"Guarda esta clave en un lugar seguro \u2014 si la pierdes, este archivo no podr\u00e1 descifrarse jam\u00e1s.",
+ clear_key:"Borrar", key_manager_hint:"Tu navegador podr\u00eda ofrecerse a guardar esto como contrase\u00f1a. Rech\u00e1zalo si no quieres que se sincronice en otro lugar.",
+ iterations_label:"Estiramiento de clave",
+ iterations_sub:"Iteraciones de PBKDF2-SHA512. Cuantas m\u00e1s, m\u00e1s lento es de ejecutar \u2014 y m\u00e1s lento de forzar.",
+ iterations_band_min:"M\u00ednimo", iterations_band_good:"Adecuado", iterations_band_strong:"Fuerte", iterations_band_extreme:"Muy fuerte",
+ run_encrypt:"Cifrar archivos", run_decrypt:"Descifrar archivos",
+ processing_encrypt:"Cifrando", processing_decrypt:"Descifrando", processing_file_of:"Archivo {i} de {n}",
+ notify_success_title:"Listo", notify_success_one:"1 archivo procesado y descargado.", notify_success_many:"{n} archivos procesados y descargados.",
+ notify_auth_title:"No se pudo descifrar", notify_auth_msg:"Clave incorrecta, o el archivo fue alterado o est\u00e1 da\u00f1ado.",
+ notify_format_title:"Archivo no v\u00e1lido", notify_format_msg:"Este archivo no fue cifrado con esta app, o su cabecera est\u00e1 da\u00f1ada.",
+ notify_partial_note:"Otro(s) {n} archivo(s) se procesaron correctamente.",
+ ok:"Aceptar", lang_title:"Idioma", lang_apply:"Aplicar",
+ about_title:"Acerca de",
+ about_body:"In-Browser File Encrypter cifra archivos con AES-256-GCM, un cifrado autenticado, usando una clave derivada de tu contrase\u00f1a con PBKDF2-HMAC-SHA512. Todo ocurre localmente en esta pesta\u00f1a: tus archivos y tu clave nunca se env\u00edan a ning\u00fan sitio, y la pol\u00edtica de seguridad de la p\u00e1gina bloquea cualquier solicitud de red. Para mayor tranquilidad, puedes desconectarte de internet una vez cargada la p\u00e1gina.",
+ about_warn1:"Esta aplicaci\u00f3n se proporciona sin garant\u00eda de ning\u00fan tipo.",
+ about_warn2:"\u00dasala bajo tu propia responsabilidad y conserva una copia de seguridad de lo importante.",
+ credits_title:"Cr\u00e9ditos", made_by:"Hecho por", download_app:"Descargar esta app",
+ need_files:"A\u00f1ade al menos un archivo.", need_key:"Escribe o genera una clave primero."
+},
+de:{
+ tagline_eyebrow:"Lokale Verschl\u00fcsselung, direkt im Browser",
+ hero_title:"Verschl\u00fcsselt Ihre Dateien, bevor sie dieses Ger\u00e4t verlassen.",
+ hero_lede:"AES-256-GCM mit einem \u00fcber PBKDF2-HMAC-SHA512 abgeleiteten Schl\u00fcssel \u2014 vollst\u00e4ndig in Ihrem Browser. Es wird nie etwas hochgeladen.",
+ stat_cipher:"GCM-Chiffre", stat_kdf:"PBKDF2-Streckung", stat_servers:"beteiligte Server",
+ mode_encrypt:"Verschl\u00fcsseln", mode_decrypt:"Entschl\u00fcsseln",
+ files_heading:"Dateien",
+ drop_title:"Dateien hierher ziehen", drop_title_decrypt:".ibfe-Dateien hierher ziehen", drop_sub:"oder zum Durchsuchen klicken",
+ files_empty:"Noch keine Dateien ausgew\u00e4hlt.", remove_file:"Entfernen",
+ key_label:"Verschl\u00fcsselungsschl\u00fcssel", key_placeholder:"Starken Schl\u00fcssel eingeben oder generieren",
+ generate_key:"Starken Schl\u00fcssel generieren", copy_key:"Kopieren", copied:"Kopiert",
+ key_warning:"Bewahren Sie diesen Schl\u00fcssel sicher auf \u2014 geht er verloren, kann die Datei nie wieder entschl\u00fcsselt werden.",
+ clear_key:"L\u00f6schen", key_manager_hint:"Ihr Browser bietet m\u00f6glicherweise an, dies als Passwort zu speichern. Lehnen Sie ab, wenn es nicht synchronisiert werden soll.",
+ iterations_label:"Schl\u00fcsselstreckung",
+ iterations_sub:"PBKDF2-SHA512-Iterationen. Mehr bedeutet langsamer in der Ausf\u00fchrung \u2014 und schwerer zu knacken.",
+ iterations_band_min:"Minimum", iterations_band_good:"Gut", iterations_band_strong:"Stark", iterations_band_extreme:"Sehr stark",
+ run_encrypt:"Dateien verschl\u00fcsseln", run_decrypt:"Dateien entschl\u00fcsseln",
+ processing_encrypt:"Verschl\u00fcsselt", processing_decrypt:"Entschl\u00fcsselt", processing_file_of:"Datei {i} von {n}",
+ notify_success_title:"Fertig", notify_success_one:"1 Datei verarbeitet und heruntergeladen.", notify_success_many:"{n} Dateien verarbeitet und heruntergeladen.",
+ notify_auth_title:"Entschl\u00fcsselung fehlgeschlagen", notify_auth_msg:"Falscher Schl\u00fcssel, oder die Datei wurde ver\u00e4ndert oder besch\u00e4digt.",
+ notify_format_title:"Keine g\u00fcltige Datei", notify_format_msg:"Diese Datei wurde nicht mit dieser App verschl\u00fcsselt, oder ihr Header ist besch\u00e4digt.",
+ notify_partial_note:"{n} weitere Datei(en) wurden erfolgreich verarbeitet.",
+ ok:"OK", lang_title:"Sprache", lang_apply:"Anwenden",
+ about_title:"\u00dcber",
+ about_body:"In-Browser File Encrypter verschl\u00fcsselt Dateien mit AES-256-GCM, einer authentifizierten Chiffre, mit einem aus Ihrem Passwort per PBKDF2-HMAC-SHA512 abgeleiteten Schl\u00fcssel. Alles geschieht lokal in diesem Tab \u2014 Ihre Dateien und Ihr Schl\u00fcssel werden niemals irgendwohin gesendet, und die Content-Security-Policy der Seite blockiert jede Netzwerkanfrage. F\u00fcr zus\u00e4tzliche Sicherheit k\u00f6nnen Sie die Internetverbindung trennen, sobald die Seite geladen ist.",
+ about_warn1:"Diese Anwendung wird ohne jegliche Gew\u00e4hrleistung bereitgestellt.",
+ about_warn2:"Nutzung auf eigene Gefahr \u2014 bewahren Sie von Wichtigem stets eine Sicherungskopie auf.",
+ credits_title:"Danksagung", made_by:"Erstellt von", download_app:"Diese App herunterladen",
+ need_files:"F\u00fcgen Sie mindestens eine Datei hinzu.", need_key:"Geben Sie zuerst einen Schl\u00fcssel ein oder generieren Sie einen."
+}
+};
+var LANGS=[{c:'en',n:'English'},{c:'he',n:'\u05e2\u05d1\u05e8\u05d9\u05ea'},{c:'es',n:'Espa\u00f1ol'},{c:'de',n:'Deutsch'}];
+var CREDIT_ENTRIES=`
+[Pure Css Animated Background](https://codepen.io/mohaiman/pen/MQqMyo) by [Mohammad Abdul Mohaiman](https://codepen.io/mohaiman)
+
+[Animated Login Form](https://codepen.io/__e8e0f2257b/pen/NxMpGq) by [Munsif Mujtaba](https://codepen.io/__e8e0f2257b)
+
+[Finance Mobile Application-UX/UI Design Screen One](https://codepen.io/sowg/pen/qBXjXoE) by [S G](https://codepen.io/sowg)
+
+[Weekly Coding Challenge #1 - Double slider Sign in/up Form - Desktop Only](https://codepen.io/FlorinPop17/pen/vPKWjd) by [Florin Pop](https://codepen.io/FlorinPop17)
+
+[Custom Language Selector](https://codepen.io/ferhatatagun/pen/oNNGdyX) by [Ferhat Atagün](https://codepen.io/ferhatatagun)
+
+[Neon Button](https://codepen.io/HighFlyer/pen/WNXRZBv) by [Thea](https://codepen.io/HighFlyer)
+
+[Fixed table header](https://codepen.io/nikhil8krishnan/pen/WvYPvv) by [Nikhil Krishnan](https://codepen.io/nikhil8krishnan)
+
+[Push Notifications](https://codepen.io/FlorinPop17/pen/xxORmaB) by [Florin Pop](https://codepen.io/FlorinPop17)
+
+[パステルドローなボタン](https://codepen.io/ash_creator/pen/oNyNbNO) by [あしざわ - Webクリエイター](https://codepen.io/ash_creator)
+
+[すりガラスなプロフィールカード](https://codepen.io/ash_creator/pen/zYaPZLB) by [あしざわ - Webクリエイター](https://codepen.io/ash_creator)
+
+[Custom Progress Bar](https://codepen.io/FlorinPop17/pen/yLyzmLZ) by [Florin Pop](https://codepen.io/FlorinPop17)
+
+[Daily UI#011 | Flash Message (Error/Success)](https://codepen.io/juliepark/pen/vjMOKQ) by [Julie Park](https://codepen.io/juliepark)
+
+[Chronicle Button](https://codepen.io/Haaguitos/pen/OJrVZdJ) by [Haaguitos](https://codepen.io/Haaguitos)
+`;
+
+/* ═══════════════════════ CRYPTO ENGINE (AES-256-GCM, native WebCrypto) ═══════════════════════ */
+var MAGIC=new Uint8Array([0x49,0x42,0x46,0x45]); // "IBFE"
+var FORMAT_VERSION=1;
+var SALT_LEN=16, IV_LEN=12;
+var ITER_MIN=210000, ITER_MAX=2000000, ITER_DEFAULT=600000, ITER_HARD_MAX=10000000;
+
+function u32be(n){var b=new Uint8Array(4);new DataView(b.buffer).setUint32(0,n,false);return b}
+function readU32be(bytes,off){return new DataView(bytes.buffer,bytes.byteOffset+off,4).getUint32(0,false)}
+function u16be(n){var b=new Uint8Array(2);new DataView(b.buffer).setUint16(0,n,false);return b}
+function readU16be(bytes,off){return new DataView(bytes.buffer,bytes.byteOffset+off,2).getUint16(0,false)}
+
+async function deriveAesGcmKey(password,salt,iterations){
+  var enc=new TextEncoder();
+  var baseKey=await crypto.subtle.importKey('raw',enc.encode(password),'PBKDF2',false,['deriveKey']);
+  return crypto.subtle.deriveKey(
+    {name:'PBKDF2',salt:salt,iterations:iterations,hash:'SHA-512'},
+    baseKey,
+    {name:'AES-GCM',length:256},
+    false,
+    ['encrypt','decrypt']
+  );
+}
+
+async function encryptOneFile(file,password,iterations){
+  var fileBuf=new Uint8Array(await file.arrayBuffer());
+  var nameBytes=new TextEncoder().encode(file.name);
+  if(nameBytes.length>65535) throw {kind:'generic'};
+  var plain=new Uint8Array(2+nameBytes.length+fileBuf.length);
+  plain.set(u16be(nameBytes.length),0);
+  plain.set(nameBytes,2);
+  plain.set(fileBuf,2+nameBytes.length);
+
+  var salt=crypto.getRandomValues(new Uint8Array(SALT_LEN));
+  var iv=crypto.getRandomValues(new Uint8Array(IV_LEN));
+  var key=await deriveAesGcmKey(password,salt,iterations);
+  var ctBuf=await crypto.subtle.encrypt({name:'AES-GCM',iv:iv},key,plain);
+  var ct=new Uint8Array(ctBuf);
+
+  var out=new Uint8Array(4+1+4+SALT_LEN+IV_LEN+ct.length);
+  var o=0;
+  out.set(MAGIC,o);o+=4;
+  out[o]=FORMAT_VERSION;o+=1;
+  out.set(u32be(iterations),o);o+=4;
+  out.set(salt,o);o+=SALT_LEN;
+  out.set(iv,o);o+=IV_LEN;
+  out.set(ct,o);
+
+  return {blob:new Blob([out],{type:'application/octet-stream'}), outName:file.name+'.ibfe'};
+}
+
+async function decryptOneFile(file,password){
+  var buf=new Uint8Array(await file.arrayBuffer());
+  var headerLen=4+1+4+SALT_LEN+IV_LEN;
+  if(buf.length<headerLen+16) throw {kind:'format'};
+  for(var i=0;i<4;i++){ if(buf[i]!==MAGIC[i]) throw {kind:'format'}; }
+  var version=buf[4];
+  if(version!==FORMAT_VERSION) throw {kind:'format'};
+  var iterations=readU32be(buf,5);
+  if(iterations<1 || iterations>50000000) throw {kind:'format'};
+  var salt=buf.slice(9,9+SALT_LEN);
+  var iv=buf.slice(9+SALT_LEN,9+SALT_LEN+IV_LEN);
+  var ct=buf.slice(headerLen);
+  var key=await deriveAesGcmKey(password,salt,iterations);
+  var plainBuf;
+  try{
+    plainBuf=await crypto.subtle.decrypt({name:'AES-GCM',iv:iv},key,ct);
+  }catch(e){
+    throw {kind:'auth'};
+  }
+  var plain=new Uint8Array(plainBuf);
+  if(plain.length<2) throw {kind:'auth'};
+  var nameLen=readU16be(plain,0);
+  if(2+nameLen>plain.length) throw {kind:'auth'};
+  var nameBytes=plain.slice(2,2+nameLen);
+  var content=plain.slice(2+nameLen);
+  var outName=new TextDecoder().decode(nameBytes) || 'decrypted.bin';
+  return {blob:new Blob([content]), outName:outName};
+}
+
+function randomInt(maxExclusive){
+  var limit=Math.floor(0x100000000/maxExclusive)*maxExclusive;
+  var x;
+  do{ x=crypto.getRandomValues(new Uint32Array(1))[0]; }while(x>=limit);
+  return x%maxExclusive;
+}
+function generateStrongKey(len){
+  len=len||32;
+  var charset="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*()-_=+[]{}";
+  var out='';
+  for(var i=0;i<len;i++) out+=charset[randomInt(charset.length)];
+  return out;
+}
+
+/* ═══════════════════════ STATE ═══════════════════════ */
+var lang='en', isRTL=false;
+var mode='encrypt';
+var queue=[]; var uidC=1;
+var iterations=ITER_DEFAULT;
+var keyVisible=false;
+var draggingSlider=false;
+
+/* ═══════════════════════ HELPERS ═══════════════════════ */
+function t(k){return (TR[lang]&&TR[lang][k])||TR.en[k]||k}
+function $(id){return document.getElementById(id)}
+function fmtNum(n){return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g,' ')}
+function fmtBytes(n){
+  if(n<1024) return n+' B';
+  var units=['KB','MB','GB','TB'];var u=-1;var v=n;
+  do{v/=1024;u++;}while(v>=1024&&u<units.length-1);
+  return v.toFixed(v<10?2:1)+' '+units[u];
+}
+function escapeHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function setFlipText(id,text){
+  var el=$(id); if(!el) return;
+  var esc=escapeHtml(text);
+  el.innerHTML='<span><em>'+esc+'</em></span><span><em>'+esc+'</em></span>';
+}
+function renderCreditEntry(str){
+  var re=/\[([^\]]+)\]\(([^)]+)\)/g;
+  var out='', last=0, m;
+  while((m=re.exec(str))){
+    out+=escapeHtml(str.slice(last,m.index));
+    out+='<a href="'+escapeHtml(m[2])+'" target="_blank" rel="noopener noreferrer">'+escapeHtml(m[1])+'</a>';
+    last=re.lastIndex;
+  }
+  out+=escapeHtml(str.slice(last));
+  return out;
+}
+function buildCredits(){
+  var list=$('credit-list'); if(!list) return;
+  list.innerHTML='';
+  CREDIT_ENTRIES.trim().split('\n').map(function(s){return s.trim();}).filter(Boolean).forEach(function(entry){
+    var li=document.createElement('li');
+    li.innerHTML=renderCreditEntry(entry);
+    list.appendChild(li);
+  });
+}
+function sleep(ms){return new Promise(function(r){setTimeout(r,ms)})}
+
+/* ═══════════════════════ FILE LIST ═══════════════════════ */
+function addFiles(list){
+  Array.prototype.forEach.call(list,function(f){ queue.push({id:'f'+(uidC++), file:f}); });
+  renderFileList();
+}
+function renderFileList(){
+  var el=$('file-list'); el.innerHTML='';
+  if(queue.length===0){
+    var p=document.createElement('p'); p.className='files-empty'; p.textContent=t('files_empty');
+    el.appendChild(p); return;
+  }
+  queue.forEach(function(item){
+    var row=document.createElement('div'); row.className='file-row';
+    row.innerHTML='<span class="fr-icon">'+ICON_FILE+'</span>'+
+      '<span class="fr-name" dir="auto">'+escapeHtml(item.file.name)+'</span>'+
+      '<span class="fr-size">'+fmtBytes(item.file.size)+'</span>'+
+      '<button type="button" class="fr-remove" aria-label="'+escapeHtml(t('remove_file'))+'">'+ICON_X+'</button>';
+    row.querySelector('.fr-remove').addEventListener('click',function(){
+      queue=queue.filter(function(q){return q.id!==item.id});
+      renderFileList();
+    });
+    el.appendChild(row);
+  });
+}
+
+/* ═══════════════════════ MODE / TRANSLATIONS ═══════════════════════ */
+function refreshModeTexts(){
+  setFlipText('tab-encrypt-label',t('mode_encrypt'));
+  setFlipText('tab-decrypt-label',t('mode_decrypt'));
+  $('dz-icon').innerHTML = mode==='encrypt'?ICON_LOCK:ICON_LOCK_OPEN;
+  $('dz-title').textContent = mode==='encrypt'?t('drop_title'):t('drop_title_decrypt');
+  $('dz-sub').textContent=t('drop_sub');
+  setFlipText('run-btn-label', mode==='encrypt'?t('run_encrypt'):t('run_decrypt'));
+  updateBand(iterations);
+  renderFileList();
+}
+function setMode(m){
+  mode=m; queue=[];
+  $('tab-encrypt').classList.toggle('active', m==='encrypt');
+  $('tab-decrypt').classList.toggle('active', m==='decrypt');
+  $('iter-section').style.display = m==='encrypt' ? '' : 'none';
+  setHint('');
+  refreshModeTexts();
+}
+function applyTranslations(){
+  document.documentElement.lang=lang;
+  document.documentElement.dir=isRTL?'rtl':'ltr';
+  $('eyebrow-text').textContent=t('tagline_eyebrow');
+  $('hero-title').textContent=t('hero_title');
+  $('hero-lede').textContent=t('hero_lede');
+  $('stat-cipher').textContent=t('stat_cipher');
+  $('stat-kdf').textContent=t('stat_kdf');
+  $('stat-servers').textContent=t('stat_servers');
+  $('files-heading').textContent=t('files_heading');
+  $('key-label').textContent=t('key_label');
+  $('key-input').placeholder=t('key_placeholder');
+  setFlipText('gen-key-label',t('generate_key'));
+  setFlipText('copy-key-label',t('copy_key'));
+  setFlipText('clear-key-label',t('clear_key'));
+  $('key-warn-text').textContent=t('key_warning');
+  $('key-manager-hint').textContent=t('key_manager_hint');
+  $('iter-label').textContent=t('iterations_label');
+  $('iter-sub').textContent=t('iterations_sub');
+  $('lang-modal-title').textContent=t('lang_title');
+  setFlipText('lang-apply-label',t('ok'));
+  $('about-title').textContent=t('about_title');
+  $('about-body').textContent=t('about_body');
+  $('about-warn1').textContent=t('about_warn1');
+  $('about-warn2').textContent=t('about_warn2');
+  $('credits-title').textContent=t('credits_title');
+  $('made-by-text').textContent=t('made_by');
+  setFlipText('download-app-label',t('download_app'));
+  setFlipText('auth-ok-label',t('ok'));
+  setFlipText('format-ok-label',t('ok'));
+  setFlipText('success-ok-label',t('ok'));
+  refreshModeTexts();
+  setIterUI(iterations);
+}
+function setLang(l){
+  lang=l; isRTL=(l==='he');
+  applyTranslations();
+  buildLangList();
+}
+
+/* ═══════════════════════ KEY FIELD ═══════════════════════ */
+function toggleKeyVisibility(){
+  keyVisible=!keyVisible;
+  $('key-input').type = keyVisible?'text':'password';
+  $('key-eye-icon').innerHTML = keyVisible?ICON_EYE_OFF:ICON_EYE;
+}
+function generateKey(){
+  var k=generateStrongKey(32);
+  $('key-input').value=k;
+  keyVisible=true; $('key-input').type='text'; $('key-eye-icon').innerHTML=ICON_EYE_OFF;
+  $('key-warn').style.display='flex';
+  setHint('');
+}
+function copyKey(){
+  var v=$('key-input').value; if(!v) return;
+  var done=function(){
+    setFlipText('copy-key-label',t('copied'));
+    setTimeout(function(){ setFlipText('copy-key-label',t('copy_key')); },1600);
+  };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(v).then(done).catch(function(){});
+  }
+}
+function clearKey(){
+  $('key-input').value='';
+  keyVisible=false; $('key-input').type='password'; $('key-eye-icon').innerHTML=ICON_EYE;
+  $('key-warn').style.display='none';
+  setHint('');
+}
+
+/* ═══════════════════════ ITERATIONS SLIDER ═══════════════════════ */
+function iterPct(v){ return Math.max(0,Math.min(1,(v-ITER_MIN)/(ITER_MAX-ITER_MIN)))*100 }
+function setIterUI(v){
+  var pct=iterPct(v);
+  if(isRTL){
+    $('iter-fill').style.left='auto'; $('iter-fill').style.right='0'; $('iter-fill').style.width=pct+'%';
+    $('iter-thumb').style.right=pct+'%'; $('iter-thumb').style.left='auto';
+  }else{
+    $('iter-fill').style.left='0'; $('iter-fill').style.right='auto'; $('iter-fill').style.width=pct+'%';
+    $('iter-thumb').style.left=pct+'%'; $('iter-thumb').style.right='auto';
+  }
+}
+function updateBand(v){
+  var cls, key;
+  if(v<400000){cls='band-min';key='iterations_band_min'}
+  else if(v<800000){cls='band-good';key='iterations_band_good'}
+  else if(v<1400000){cls='band-strong';key='iterations_band_strong'}
+  else {cls='band-extreme';key='iterations_band_extreme'}
+  $('band-chip').className='band-chip '+cls;
+  $('band-chip').textContent=t(key);
+}
+function updateIterations(v){
+  v=Math.max(ITER_MIN,Math.min(ITER_HARD_MAX,Math.round(v)));
+  iterations=v;
+  $('iter-num').value=fmtNum(v);
+  $('iter-slider').setAttribute('aria-valuenow',String(v));
+  setIterUI(Math.min(v,ITER_MAX));
+  updateBand(v);
+}
+function sliderInteract(clientX){
+  var rect=$('iter-track').getBoundingClientRect();
+  var pct = isRTL ? (rect.right-clientX)/rect.width : (clientX-rect.left)/rect.width;
+  pct=Math.max(0,Math.min(1,pct));
+  var v=ITER_MIN+pct*(ITER_MAX-ITER_MIN);
+  updateIterations(Math.round(v/10000)*10000);
+}
+
+/* ═══════════════════════ PROCESSING / NOTIFICATIONS ═══════════════════════ */
+function setHint(msg){ $('hint-text').textContent=msg||''; }
+function showProcOverlay(){ $('proc-overlay').classList.add('on'); }
+function hideProcOverlay(){ $('proc-overlay').classList.remove('on'); }
+function updateProcOverlay(i,n,name){
+  $('proc-verb').textContent = mode==='encrypt'?t('processing_encrypt'):t('processing_decrypt');
+  $('proc-name').textContent = name;
+  $('proc-count').textContent = t('processing_file_of').replace('{i}',i).replace('{n}',n);
+}
+function closeFaceInstant(id){
+  var b=$(id); if(!b) return;
+  b.style.display='none';
+  b.classList.remove('slide-in','slide-out');
+}
+function closeAllFaces(){ ['box-success','box-format','box-auth'].forEach(closeFaceInstant); }
+function closeFace(id){
+  var b=$(id); if(!b || b.style.display==='none') return;
+  b.classList.remove('slide-in');
+  void b.offsetWidth; // restart animation
+  b.classList.add('slide-out');
+  setTimeout(function(){ closeFaceInstant(id); },400);
+}
+function showFace(kind,okCount,extra){
+  closeAllFaces();
+  var boxId, title, msg;
+  if(kind==='success'){
+    boxId='box-success';
+    title=t('notify_success_title');
+    msg = okCount===1 ? t('notify_success_one') : t('notify_success_many').replace('{n}',fmtNum(okCount));
+  } else if(kind==='format'){
+    boxId='box-format'; title=t('notify_format_title'); msg=t('notify_format_msg');
+  } else {
+    boxId='box-auth'; title=t('notify_auth_title'); msg=t('notify_auth_msg');
+  }
+  if(kind!=='success' && extra>0){ msg += ' ' + t('notify_partial_note').replace('{n}',fmtNum(extra)); }
+  var box=$(boxId);
+  box.querySelector('.notif-title').textContent=title;
+  box.querySelector('.notif-msg').textContent=msg;
+  box.style.display='flex';
+  box.classList.remove('slide-out');
+  void box.offsetWidth; // restart animation
+  box.classList.add('slide-in');
+  // No auto-dismiss timer: the notification only goes away when its OK
+  // button is pressed.
+}
+function downloadBlob(blob,filename){
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url; a.download=filename; document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); },4000);
+}
+function downloadAppSource(){
+  // Neutralize anything transient or sensitive before serializing the live DOM,
+  // so the downloaded copy is always a clean, blank slate rather than a
+  // snapshot of the current session (queued filenames, an open notification,
+  // a revealed key field, etc.). The key's typed VALUE was never reflected
+  // into the DOM as an attribute in the first place, so it can't leak here.
+  var savedFileListHTML=$('file-list').innerHTML;
+  var savedKeyWarnDisplay=$('key-warn').style.display;
+  var savedKeyType=$('key-input').type;
+  closeAllFaces();
+  closeLangModal();
+  $('dropzone').classList.remove('drag');
+  $('file-list').innerHTML='<p class="files-empty">'+escapeHtml(t('files_empty'))+'</p>';
+  $('key-warn').style.display='none';
+  $('key-input').type='password';
+
+  var html='<!DOCTYPE html>\n'+document.documentElement.outerHTML;
+  downloadBlob(new Blob([html],{type:'text/html'}),'index.html');
+
+  $('file-list').innerHTML=savedFileListHTML;
+  $('key-warn').style.display=savedKeyWarnDisplay;
+  $('key-input').type=savedKeyType;
+}
+
+async function runBatch(){
+  if(queue.length===0){ setHint(t('need_files')); return; }
+  if(!$('key-input').value){ setHint(t('need_key')); return; }
+  setHint('');
+  $('run-btn').disabled=true;
+  var items=queue.slice();
+  var keyVal=$('key-input').value;
+  var itersVal=iterations;
+  showProcOverlay();
+  var okCount=0, failFormat=0, failAuth=0;
+  var stillFailed=[];
+  for(var i=0;i<items.length;i++){
+    updateProcOverlay(i+1,items.length,items[i].file.name);
+    await sleep(140);
+    try{
+      var res = mode==='encrypt'
+        ? await encryptOneFile(items[i].file, keyVal, itersVal)
+        : await decryptOneFile(items[i].file, keyVal);
+      downloadBlob(res.blob,res.outName);
+      okCount++;
+    }catch(e){
+      var kind=(e&&e.kind)||'generic';
+      if(kind==='format') failFormat++; else failAuth++;
+      stillFailed.push(items[i]);
+    }
+    await sleep(70);
+  }
+  hideProcOverlay();
+  $('run-btn').disabled=false;
+  queue=stillFailed;
+  renderFileList();
+
+  var total=items.length;
+  if(okCount===total){ showFace('success',okCount); }
+  else if(failFormat>0 && failAuth===0){ showFace('format',okCount,okCount); }
+  else { showFace('auth',okCount,okCount); }
+}
+
+/* ═══════════════════════ LANGUAGE MODAL ═══════════════════════ */
+function buildLangList(){
+  var list=$('lang-list'); list.innerHTML='';
+  LANGS.forEach(function(l){
+    var b=document.createElement('button'); b.type='button';
+    b.className='lang-opt'+(lang===l.c?' active':'');
+    var esc=escapeHtml(l.n);
+    b.innerHTML='<span class="flip-label"><span><em>'+esc+'</em></span><span><em>'+esc+'</em></span></span>';
+    b.addEventListener('click',function(){ setLang(l.c); closeLangModal(); });
+    list.appendChild(b);
+  });
+}
+function openLangModal(){ $('lang-overlay').classList.add('on'); }
+function closeLangModal(){ $('lang-overlay').classList.remove('on'); }
+
+/* ═══════════════════════ WIRING ═══════════════════════ */
+function wireEvents(){
+  $('tab-encrypt').addEventListener('click',function(){ setMode('encrypt'); });
+  $('tab-decrypt').addEventListener('click',function(){ setMode('decrypt'); });
+
+  var dz=$('dropzone'), fileInput=$('file-input');
+  dz.addEventListener('click',function(){ fileInput.click(); });
+  dz.addEventListener('keydown',function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); fileInput.click(); } });
+  ['dragenter','dragover'].forEach(function(ev){
+    dz.addEventListener(ev,function(e){ e.preventDefault(); dz.classList.add('drag'); });
+  });
+  ['dragleave','drop'].forEach(function(ev){
+    dz.addEventListener(ev,function(e){ e.preventDefault(); dz.classList.remove('drag'); });
+  });
+  dz.addEventListener('drop',function(e){
+    if(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+  });
+  fileInput.addEventListener('change',function(e){
+    if(e.target.files && e.target.files.length) addFiles(e.target.files);
+    fileInput.value='';
+  });
+
+  $('key-toggle').addEventListener('click',toggleKeyVisibility);
+  $('gen-key-btn').addEventListener('click',generateKey);
+  $('copy-key-btn').addEventListener('click',copyKey);
+  $('clear-key-btn').addEventListener('click',clearKey);
+  $('key-input').addEventListener('input',function(){ setHint(''); });
+
+  $('iter-slider').addEventListener('mousedown',function(e){
+    e.preventDefault(); draggingSlider=true; sliderInteract(e.clientX);
+    function mv(ev){ sliderInteract(ev.clientX); }
+    function up(){ draggingSlider=false; window.removeEventListener('mousemove',mv); window.removeEventListener('mouseup',up); }
+    window.addEventListener('mousemove',mv); window.addEventListener('mouseup',up);
+  });
+  $('iter-slider').addEventListener('touchstart',function(e){
+    sliderInteract(e.touches[0].clientX);
+    function mv(ev){ sliderInteract(ev.touches[0].clientX); }
+    function up(){ window.removeEventListener('touchmove',mv); window.removeEventListener('touchend',up); }
+    window.addEventListener('touchmove',mv,{passive:true}); window.addEventListener('touchend',up);
+  },{passive:true});
+  $('iter-slider').setAttribute('tabindex','0');
+  $('iter-slider').addEventListener('keydown',function(e){
+    var step=10000;
+    if(e.key==='ArrowRight'||e.key==='ArrowUp') updateIterations(iterations+(isRTL?-step:step));
+    else if(e.key==='ArrowLeft'||e.key==='ArrowDown') updateIterations(iterations+(isRTL?step:-step));
+    else return;
+    e.preventDefault();
+  });
+  $('iter-num').addEventListener('change',function(){
+    var raw=this.value.replace(/[^\d]/g,'');
+    var v=parseInt(raw,10);
+    if(isNaN(v)) v=ITER_DEFAULT;
+    updateIterations(v);
+  });
+
+  $('run-btn').addEventListener('click',runBatch);
+
+  ['auth-ok','format-ok','success-ok'].forEach(function(btnId,idx){
+    var boxIds=['box-auth','box-format','box-success'];
+    $(btnId).addEventListener('click',function(){ closeFace(boxIds[idx]); });
+  });
+
+  $('lang-btn').addEventListener('click',openLangModal);
+  $('download-app-btn').addEventListener('click',downloadAppSource);
+  $('lang-close').addEventListener('click',closeLangModal);
+  $('lang-overlay').addEventListener('click',function(e){ if(e.target===this) closeLangModal(); });
+  $('lang-apply').addEventListener('click',closeLangModal);
+  document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeLangModal(); });
+
+  window.addEventListener('resize',function(){ setIterUI(iterations); });
+}
+
+/* ═══════════════════════ INIT ═══════════════════════ */
+function init(){
+  wireEvents();
+  buildLangList();
+  buildCredits();
+  applyTranslations();
+  setMode('encrypt');
+  updateIterations(ITER_DEFAULT);
+}
+document.addEventListener('DOMContentLoaded',init);
+})();
+</script>
+
+
+</body></html>
